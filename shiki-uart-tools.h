@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+int suart_write_data(int s_fd, unsigned char* data, int size_of_data);
 int suart_write(int s_fd, unsigned char* string);
 int suart_read(int s_fd, unsigned char* buffer);
 unsigned char suart_getchar(int s_fd);

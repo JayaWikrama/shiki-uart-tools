@@ -37,8 +37,91 @@ static int8_t suart_set_attrib(int fd, int speed, int blocking_mode, int timeout
         return -1;
     }
 
-    cfsetospeed (&stty_attrib, speed);
-    cfsetispeed (&stty_attrib, speed);
+    if (speed == 0){
+        cfsetospeed (&stty_attrib, B0);
+        cfsetispeed (&stty_attrib, B0);
+    }
+    else if (speed == 50){
+        cfsetospeed (&stty_attrib, B50);
+        cfsetispeed (&stty_attrib, B50);
+    }
+    else if (speed == 75){
+        cfsetospeed (&stty_attrib, B75);
+        cfsetispeed (&stty_attrib, B75);
+    }
+    else if (speed == 110){
+        cfsetospeed (&stty_attrib, B110);
+        cfsetispeed (&stty_attrib, B110);
+    }
+    else if (speed == 134){
+        cfsetospeed (&stty_attrib, B134);
+        cfsetispeed (&stty_attrib, B134);
+    }
+    else if (speed == 150){
+        cfsetospeed (&stty_attrib, B150);
+        cfsetispeed (&stty_attrib, B150);
+    }
+    else if (speed == 200){
+        cfsetospeed (&stty_attrib, B200);
+        cfsetispeed (&stty_attrib, B200);
+    }
+    else if (speed == 300){
+        cfsetospeed (&stty_attrib, B300);
+        cfsetispeed (&stty_attrib, B300);
+    }
+    else if (speed == 600){
+        cfsetospeed (&stty_attrib, B600);
+        cfsetispeed (&stty_attrib, B600);
+    }
+    else if (speed == 1200){
+        cfsetospeed (&stty_attrib, B1200);
+        cfsetispeed (&stty_attrib, B1200);
+    }
+    else if (speed == 1800){
+        cfsetospeed (&stty_attrib, B1800);
+        cfsetispeed (&stty_attrib, B1800);
+    }
+    else if (speed == 2400){
+        cfsetospeed (&stty_attrib, B2400);
+        cfsetispeed (&stty_attrib, B2400);
+    }
+    else if (speed == 4800){
+        cfsetospeed (&stty_attrib, B4800);
+        cfsetispeed (&stty_attrib, B4800);
+    }
+    else if (speed == 9600){
+        cfsetospeed (&stty_attrib, B9600);
+        cfsetispeed (&stty_attrib, B9600);
+    }
+    else if (speed == 19200){
+        cfsetospeed (&stty_attrib, B19200);
+        cfsetispeed (&stty_attrib, B19200);
+    }
+    else if (speed == 38400){
+        cfsetospeed (&stty_attrib, B38400);
+        cfsetispeed (&stty_attrib, B38400);
+    }
+    else if (speed == 57600){
+        cfsetospeed (&stty_attrib, B57600);
+        cfsetispeed (&stty_attrib, B57600);
+    }
+    else if (speed == 115200){
+        cfsetospeed (&stty_attrib, B115200);
+        cfsetispeed (&stty_attrib, B115200);
+    }
+    else if (speed == 230400){
+        cfsetospeed (&stty_attrib, B230400);
+        cfsetispeed (&stty_attrib, B230400);
+    }
+    else if (speed == 921600){
+        cfsetospeed (&stty_attrib, B921600);
+        cfsetispeed (&stty_attrib, B921600);
+    }
+    else {
+        suart_debug(__func__, "WARNING", "custom baudrate?\n");
+        cfsetospeed (&stty_attrib, ((speed*B9600)/9600));
+        cfsetispeed (&stty_attrib, ((speed*B9600)/9600));
+    }
 
     stty_attrib.c_cflag = (stty_attrib.c_cflag & ~CSIZE) | CS8; // 8-bit chars
 
@@ -66,6 +149,10 @@ static int8_t suart_set_attrib(int fd, int speed, int blocking_mode, int timeout
 
 int suart_write(int s_fd, unsigned char* string){
 	return write(s_fd, string, strlen((char *) string));
+}
+
+int suart_write_data(int s_fd, unsigned char* data, int size_of_data){
+	return write(s_fd, data, size_of_data);
 }
 
 int suart_read(int s_fd, unsigned char* buff){
