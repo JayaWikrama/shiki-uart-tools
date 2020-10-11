@@ -9,24 +9,79 @@
 #include <string.h>
 #include <time.h>
 #include <stdarg.h>
+#include <sys/ioctl.h>
+#include <sys/time.h>
 #include "shiki-uart-tools.h"
 
+int suart_debug_mode_status = 0;
+int suart_write_debug_status = 0;
+
 static void suart_debug(const char *function_name, char *debug_type, char *debug_msg, ...){
-	time_t debug_time;
-	struct tm *d_tm;
-	va_list aptr;
+    if (suart_debug_mode_status == 1 || strcmp(debug_type, "INFO") != 0){
+        struct tm *d_tm;
+        struct timeval tm_debug;
+        uint16_t msec = 0;
+	    va_list aptr;
+		
+	    gettimeofday(&tm_debug, NULL);
+	    d_tm = localtime(&tm_debug.tv_sec);
+        msec = tm_debug.tv_usec/1000;
 	
-	time(&debug_time);
-	d_tm = localtime(&debug_time);
-
-	char tmp_debug_msg[500];
-	va_start(aptr, debug_msg);
-	vsprintf(tmp_debug_msg, debug_msg, aptr);
-	va_end(aptr);
-
-	if (strcmp(debug_type, "INFO")==0) printf("\033[1;32m%02d-%02d-%04d %02d:%02d:%02d\033[1;34m S_UART\033[1;32m %s: %s: %s\033[0m", d_tm->tm_mday, d_tm->tm_mon+1, d_tm->tm_year+1900, d_tm->tm_hour, d_tm->tm_min, d_tm->tm_sec, debug_type, function_name, tmp_debug_msg);
-	else if (strcmp(debug_type, "WARNING")==0) printf("\033[1;33m%02d-%02d-%04d %02d:%02d:%02d\033[1;34m S_UART\033[1;33m %s: %s: %s\033[0m", d_tm->tm_mday, d_tm->tm_mon+1, d_tm->tm_year+1900, d_tm->tm_hour, d_tm->tm_min, d_tm->tm_sec, debug_type, function_name, tmp_debug_msg);
-	else if (strcmp(debug_type, "ERROR")==0) printf("\033[1;31m%02d-%02d-%04d %02d:%02d:%02d\033[1;34m S_UART\033[1;31m %s: %s: %s\033[0m", d_tm->tm_mday, d_tm->tm_mon+1, d_tm->tm_year+1900, d_tm->tm_hour, d_tm->tm_min, d_tm->tm_sec, debug_type, function_name, tmp_debug_msg);
+	    char* tmp_debug_msg;
+        tmp_debug_msg = (char *) malloc(1024*sizeof(char));
+        if (tmp_debug_msg == NULL){
+            printf("%02d-%02d-%04d %02d:%02d:%02d.%03i ERROR: %s: failed to allocate debug variable memory",
+             d_tm->tm_mday, d_tm->tm_mon+1, d_tm->tm_year+1900, d_tm->tm_hour, d_tm->tm_min, d_tm->tm_sec, msec, __func__
+            );
+            return;
+        }
+	    va_start(aptr, debug_msg);
+	    vsprintf(tmp_debug_msg, debug_msg, aptr);
+	    va_end(aptr);
+        #ifdef __USE_COLOR__
+            if (strcmp(debug_type, "INFO")==0)
+                printf("\033[1;32m%02d-%02d-%04d %02d:%02d:%02d.%03d\033[1;34m SUART\033[1;32m %s: %s: %s\033[0m",
+                 d_tm->tm_mday, d_tm->tm_mon+1, d_tm->tm_year+1900, d_tm->tm_hour, d_tm->tm_min, d_tm->tm_sec,
+                 msec, debug_type, function_name, tmp_debug_msg
+                );
+            if (strcmp(debug_type, "WEBSERVER INFO")==0)
+                printf("\033[1;32m%02d-%02d-%04d %02d:%02d:%02d.%03d\033[1;34m SUART\033[1;32m %s: %s: %s\033[0m",
+                 d_tm->tm_mday, d_tm->tm_mon+1, d_tm->tm_year+1900, d_tm->tm_hour, d_tm->tm_min, d_tm->tm_sec,
+                 msec, debug_type, function_name, tmp_debug_msg
+                );
+    	    else if (strcmp(debug_type, "WARNING")==0)
+                printf("\033[1;33m%02d-%02d-%04d %02d:%02d:%02d.%03d\033[1;34m SUART\033[1;33m %s: %s: %s\033[0m",
+                 d_tm->tm_mday, d_tm->tm_mon+1, d_tm->tm_year+1900, d_tm->tm_hour, d_tm->tm_min, d_tm->tm_sec,
+                 msec, debug_type, function_name, tmp_debug_msg
+                );
+    	    else if (strcmp(debug_type, "ERROR")==0)
+                printf("\033[1;31m%02d-%02d-%04d %02d:%02d:%02d.%03d\033[1;34m SUART\033[1;31m %s: %s: %s\033[0m",
+                 d_tm->tm_mday, d_tm->tm_mon+1, d_tm->tm_year+1900, d_tm->tm_hour, d_tm->tm_min, d_tm->tm_sec,
+                 msec, debug_type, function_name, tmp_debug_msg
+                );
+            else if (strcmp(debug_type, "CRITICAL")==0)
+                printf("\033[1;31m%02d-%02d-%04d %02d:%02d:%02d.%03d\033[1;34m SUART\033[1;31m %s: %s: %s\033[0m",
+                 d_tm->tm_mday, d_tm->tm_mon+1, d_tm->tm_year+1900, d_tm->tm_hour, d_tm->tm_min, d_tm->tm_sec,
+                 msec, debug_type, function_name, tmp_debug_msg
+                );
+	    #else
+            printf("%02d-%02d-%04d %02d:%02d:%02d.%03d %s: %s: %s",
+             d_tm->tm_mday, d_tm->tm_mon+1, d_tm->tm_year+1900, d_tm->tm_hour, d_tm->tm_min, d_tm->tm_sec,
+             msec, debug_type, function_name, tmp_debug_msg
+            );
+        #endif
+        if (suart_write_debug_status == 1){
+            char write_cmd[128 + strlen(function_name) + strlen(tmp_debug_msg)];
+            memset(write_cmd, 0x00, sizeof(write_cmd));
+            sprintf(write_cmd, "echo '%02d-%02d-%04d %02d:%02d:%02d.%03d %s: %s: %s' >> debug.dsrc",
+             d_tm->tm_mday, d_tm->tm_mon+1, d_tm->tm_year+1900, d_tm->tm_hour, d_tm->tm_min, d_tm->tm_sec,
+             msec, debug_type, function_name, tmp_debug_msg
+            );
+            system(write_cmd);
+        }
+        free(tmp_debug_msg);
+        tmp_debug_msg = NULL;
+    }
 }
 
 static int8_t suart_set_attrib(int fd, int speed, int blocking_mode, int timeout, int parity){
@@ -155,10 +210,22 @@ int suart_write_data(int s_fd, unsigned char* data, int size_of_data){
 	return write(s_fd, data, size_of_data);
 }
 
+unsigned long suart_check_input_bytes(int s_fd){
+    unsigned long input_bytes = 0;
+    if (ioctl(s_fd, FIONREAD, &input_bytes) != 0){
+        return -1;
+    }
+    return input_bytes;
+}
+
+void suart_flush(int s_fd){
+    tcflush(s_fd,TCIOFLUSH);
+}
+
 int suart_read(int s_fd, unsigned char* buff){
     int8_t bytes_recv = 0;
     int total_bytes = 0, total_tmp = 0;
-    unsigned char *buff_tmp, *part_receive;
+    unsigned char *buff_tmp = NULL, *part_receive = NULL;
     buff_tmp = (unsigned char *) malloc(9 * sizeof(unsigned char));
     if (buff_tmp == NULL){
         suart_debug(__func__, "ERROR", "failed to allocate memory\n");
@@ -167,12 +234,14 @@ int suart_read(int s_fd, unsigned char* buff){
     part_receive = (unsigned char *) malloc(9 * sizeof(unsigned char));
     if (part_receive == NULL){
         suart_debug(__func__, "ERROR", "failed to allocate memory\n");
+        free(buff_tmp);
+        buff_tmp = NULL;
         return -1;
     }
     memset (buff_tmp, 0x00, 9 * sizeof(char));
     do{
         memset (part_receive, 0x00, 9 * sizeof(char));
-    	bytes_recv = read(s_fd, (void *) part_receive, 8);
+    	bytes_recv = read(s_fd, (void *) part_receive, 1);
         if (bytes_recv > 0){
             total_tmp = total_bytes;
             total_bytes = total_bytes + bytes_recv;
@@ -180,7 +249,7 @@ int suart_read(int s_fd, unsigned char* buff){
             memcpy(buff_tmp + total_tmp, part_receive, bytes_recv);
             buff_tmp[total_bytes] = 0x00;
         }
-    } while (bytes_recv == 8);
+    } while (bytes_recv == 1);
     free(part_receive);
     tcflush(s_fd,TCIOFLUSH);
     if (total_bytes == 0){
@@ -197,18 +266,118 @@ int suart_read(int s_fd, unsigned char* buff){
     return total_bytes;
 }
 
+unsigned char *suart_read_chuncked_data(
+ int s_fd,
+ int16_t bytes_per_recv,
+ unsigned char* stop_bits,
+ int8_t stop_bits_size,
+ int16_t *_total_bytes
+){
+    int16_t bytes_recv = 0;
+    int16_t total_bytes = 0;
+    unsigned char *buff_tmp = NULL;
+    unsigned char *part_receive = NULL;
+    buff_tmp = (unsigned char *) malloc((bytes_per_recv + 2) * sizeof(unsigned char));
+    if (buff_tmp == NULL){
+        suart_debug(__func__, "ERROR", "failed to allocate memory (1)\n");
+        *_total_bytes = 0;
+        return NULL;
+    }
+    part_receive = (unsigned char *) malloc((bytes_per_recv + 2) * sizeof(unsigned char));
+    if (part_receive == NULL){
+        suart_debug(__func__, "ERROR", "failed to allocate memory (2)\n");
+        free(buff_tmp);
+        buff_tmp = NULL;
+        *_total_bytes = 0;
+        return NULL;
+    }
+    memset (buff_tmp, 0x00, bytes_per_recv * sizeof(char));
+    do{
+        memset (part_receive, 0x00, (bytes_per_recv + 1) * sizeof(char));
+    	bytes_recv = read(s_fd, (void *) part_receive, bytes_per_recv);
+        if (bytes_recv > 0){
+            total_bytes += bytes_recv;
+            buff_tmp = (unsigned char *) realloc(buff_tmp, (total_bytes + 2) * sizeof(unsigned char));
+            memcpy(buff_tmp + (total_bytes - bytes_recv), part_receive, bytes_recv);
+            buff_tmp[total_bytes] = 0x00;
+            if (total_bytes > (int16_t) stop_bits_size){
+                if (memcmp(buff_tmp + (total_bytes - stop_bits_size), stop_bits, stop_bits_size) == 0){
+                    break;
+                }
+            }
+        }
+    } while (bytes_recv > 0);
+    free(part_receive);
+    *_total_bytes = total_bytes;
+    part_receive = NULL;
+    if (total_bytes == 0){
+        free(buff_tmp);
+        return NULL;
+    }
+    else if (total_bytes == 0 && bytes_recv == -1){
+        free(buff_tmp);
+        suart_debug(__func__, "ERROR", "failed to access file descriptor\n");
+        *_total_bytes = -1;
+        return NULL;
+    }
+    return buff_tmp;
+}
+
+int suart_get_some_data(int s_fd, unsigned char* buff, int buffer_size){
+    int bytes_recv = 0;
+    int bytes_request = buffer_size;
+    int total_bytes = 0, total_tmp = 0;
+    unsigned char *buff_tmp = NULL, *part_receive = NULL;
+    buff_tmp = (unsigned char *) malloc((buffer_size + 1) * sizeof(unsigned char));
+    if (buff_tmp == NULL){
+        suart_debug(__func__, "ERROR", "failed to allocate memory\n");
+        return -1;
+    }
+    part_receive = (unsigned char *) malloc((buffer_size + 1) * sizeof(unsigned char));
+    if (part_receive == NULL){
+        suart_debug(__func__, "ERROR", "failed to allocate memory\n");
+        free(buff_tmp);
+        buff_tmp = NULL;
+        return -1;
+    }
+    memset (buff_tmp, 0x00, (buffer_size + 1) * sizeof(char));
+    do{
+        memset (part_receive, 0x00, (buffer_size + 1) * sizeof(char));
+    	bytes_recv = read(s_fd, (void *) part_receive, bytes_request);
+        if (bytes_recv > 0){
+            total_tmp = total_bytes;
+            bytes_request = bytes_request - bytes_recv;
+            total_bytes = total_bytes + bytes_recv;
+            memcpy(buff_tmp + total_tmp, part_receive, bytes_recv);
+            buff_tmp[total_bytes] = 0x00;
+            suart_debug(__func__, "INFO", "receive %d (0x%02x) (-%d) bytes from %d bytes\n", total_bytes, buff_tmp[total_bytes - 1], bytes_request, buffer_size);
+        }
+    } while (bytes_recv > 0 && total_bytes < buffer_size && bytes_recv > 0);
+    free(part_receive);
+    if (total_bytes == 0){
+        free(buff_tmp);
+        return 0;
+    }
+    else if (total_bytes == 0 && bytes_recv == -1){
+        free(buff_tmp);
+        suart_debug(__func__, "ERROR", "failed to access file descriptor\n");
+        return -1;
+    }
+    memcpy(buff, buff_tmp, (total_bytes + 1)*sizeof(char));
+    free(buff_tmp);
+    return total_bytes;
+}
 
 unsigned char suart_getchar(int s_fd){
     unsigned char buff[2];
     int retval = 0;
     retval = read(s_fd, (void *) buff, 1);
     if (retval == 0){
-        tcflush(s_fd,TCIOFLUSH);
         return 0;
     }
     else if(retval != 1){
         suart_debug(__func__, "WARNING", "invalid data\n");
-        return -1;
+        return 0;
     }
     retval = buff[0];
     return retval;
